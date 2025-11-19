@@ -151,12 +151,8 @@ public class ConfigurationMain
                 if (!Instance.MultiBox)
                     return;
 
-                if (!value)
-                    if (Instance.host)
-                        Server.SendStepStart();
-
-                if (stepBlock == value)
-                    return;
+                if (Instance.host && Server.whatStep != Plugin.Indexer)
+                    Server.SendStepStart();
 
                 stepBlock = value;
 
@@ -204,6 +200,7 @@ public class ConfigurationMain
 
             internal static readonly DateTime[] keepAlives    = new DateTime[MAX_SERVERS];
             private static readonly  bool[]     stepConfirms  = new bool[MAX_SERVERS];
+            public static int whatStep                       = -1;
             private static readonly  bool[]     deathConfirms = new bool[MAX_SERVERS];
 
             private static readonly NamedPipeServerStream?[] pipes = new NamedPipeServerStream[MAX_SERVERS];
@@ -330,7 +327,14 @@ public class ConfigurationMain
                                 keepAlives[index] = DateTime.Now;
                                 break;
                             case STEP_COMPLETED:
-                                stepConfirms[index] = true;
+                                if (int.TryParse(split[1], out int step) && step == whatStep)
+                                {
+                                    stepConfirms[index] = true;
+                                } 
+                                else
+                                {
+                                    ErrorLog($"Step mismatch: {message} should be step {whatStep}");
+                                }
                                 CheckStepProgress();
                                 break;
                             case DEATH_KEY:
@@ -384,9 +388,6 @@ public class ConfigurationMain
                 if((Plugin.Stage != Stage.Looping && Plugin.Indexer >= 0 && Plugin.Indexer < Plugin.Actions.Count && Plugin.Actions[Plugin.Indexer].Tag == ActionTag.Treasure || stepConfirms.All(x => x)) &&
                    stepBlock)
                 {
-                    for (int i = 0; i < stepConfirms.Length; i++)
-                        stepConfirms[i] = false;
-
                     DebugLog("All clients completed the step");
                     stepBlock = false;
                 }
@@ -399,6 +400,12 @@ public class ConfigurationMain
             public static void SendStepStart()
             {
                 DebugLog("Synchronizing Clients to Server step");
+                if (whatStep != Plugin.Indexer)
+                {
+                    whatStep = Plugin.Indexer;
+                    for (int i = 0; i < stepConfirms.Length; i++)
+                        stepConfirms[i] = false;
+                }
                 SendToAllClients($"{STEP_START}|{Plugin.Indexer}");
             }
 
@@ -482,8 +489,16 @@ public class ConfigurationMain
                                 case STEP_START:
                                     if (int.TryParse(split[1], out int step))
                                     {
+                                        if (step == Plugin.Indexer && stepBlock)
+                                        {
+                                            DebugLog("Received step start for current step, unblocking.");
+                                            SendStepCompleted();
+                                        }
+                                        else
+                                        {
                                         Plugin.Indexer = step;
                                         stepBlock      = false;
+                                        }
                                     }
                                     break;
                                 case KEEPALIVE_RESPONSE_KEY:
@@ -560,7 +575,7 @@ public class ConfigurationMain
                     return;
                 }
                 Plugin.Action = "Waiting for others";
-                clientSS.WriteString(STEP_COMPLETED);
+                clientSS.WriteString($"{STEP_COMPLETED}|{Plugin.Indexer}");
                 DebugLog("Step completed sent to server.");
             }
 

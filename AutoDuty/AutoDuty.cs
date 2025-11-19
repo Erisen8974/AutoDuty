@@ -721,6 +721,8 @@ public sealed class AutoDuty : IDalamudPlugin
         if (ConfigurationMain.Instance.MultiBox)
         {
             bool isDuty = ContentHelper.DictionaryContent.ContainsKey(t);
+            if(!isDuty)
+                Plugin.Indexer = Plugin.Actions.Count;
             if (!ConfigurationMain.Instance.host)
             {
                 if (isDuty)
@@ -1098,7 +1100,8 @@ public sealed class AutoDuty : IDalamudPlugin
         if (queue || ConfigurationMain.Instance is { MultiBox: true, host: false }) 
             this.AutoConsume();
 
-        ConfigurationMain.MultiboxUtility.MultiboxBlockingNextStep = true;
+        this.TaskManager.Enqueue(() => ConfigurationMain.MultiboxUtility.MultiboxBlockingNextStep = true, "Loop-ActionsCompletedMessage");
+        
 
         if (!queue)
         {
@@ -1483,7 +1486,8 @@ public sealed class AutoDuty : IDalamudPlugin
             if (this.PathAction.Name.IsNullOrEmpty() || this.PathAction.Name.Equals("MoveTo") || this.PathAction.Name.Equals("TreasureCoffer") || this.PathAction.Name.Equals("Revival"))
             {
                 this.Stage = Stage.Reading_Path;
-                this.Indexer++;
+                if (ConfigurationMain.Instance is not { MultiBox: true, host: false })
+                    this.Indexer++;
             }
             else
             {
@@ -1516,7 +1520,9 @@ public sealed class AutoDuty : IDalamudPlugin
         if (!this.TaskManager.IsBusy)
         {
             this.Stage = Stage.Reading_Path;
-            this.Indexer++;
+            
+            if (ConfigurationMain.Instance is not { MultiBox: true, host: false })
+                this.Indexer++;
             return;
         }
     }
